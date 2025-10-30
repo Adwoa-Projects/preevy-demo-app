@@ -30,11 +30,11 @@ jobs:
 
       - name: Mark preview as down in dashboard
         env:
-          RUN_ID: ${{ github.run_id }}
+          PR_ID: ${{ github.event.pull_request.id }}
         run: |
           payload=$(
             jq -n \
-              --arg id "preevy-$RUN_ID" \
+              --arg id "preevy-$PR_ID" \
               '{build_id:$id, status:"down"}'
           )
 

@@ -38,6 +38,6 @@ jobs:
               '{build_id:$id, status:"down"}'
           )
 
-          curl -sS -X POST "https://preevy-preview-manager.vercel.app/api/previews" \
+          curl -sS -X PATCH "https://preevy-preview-manager.vercel.app/api/previews" \
             -H "Content-Type: application/json" \
             -d "$payload"

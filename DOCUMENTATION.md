@@ -269,6 +269,41 @@ concurrency: preevy-${{ github.event.number }}
        profile-url: ${{ vars.PREEVY_PROFILE_URL }}
    ```
 
+7. **Dashboard Integration**:
+   ```yaml
+   - name: Send build metadata to public API
+     env:
+       PR_ID: ${{ github.event.pull_request.id }}
+       PR_NUMBER: ${{ github.event.number }}
+       REPO: ${{ github.repository }}
+       SHA: ${{ github.sha }}
+       ACTOR: ${{ github.actor }}
+       FRONTEND_URL: ${{ fromJson(steps.preevy_up.outputs.urls-map).frontend[3000] }}
+     run: |
+       payload=$(
+         jq -n \
+           --arg id "preevy-$PR_ID" \
+           --arg repo "$REPO" \
+           --arg pr "$PR_NUMBER" \
+           --arg sha "$SHA" \
+           --arg branch "${{ github.ref_name || github.ref }}" \
+           --arg actor "$ACTOR" \
+           --arg frontend "$FRONTEND_URL" \
+           '{build_id:$id, repo:$repo, pr_number:($pr|tonumber), commit_sha:$sha, branch:$branch, actor:$actor, frontend_url:$frontend, status:"ready"}'
+       )
+
+       curl -sS -X POST "https://preevy-preview-manager.vercel.app/api/previews" \
+         -H "Content-Type: application/json" \
+         -d "$payload"
+   ```
+
+   This step sends metadata about the deployed preview environment to a centralized dashboard, including:
+   - **Build ID**: Unique identifier combining "preevy-" and PR ID
+   - **Repository Info**: Repository name and branch
+   - **PR Details**: PR number, commit SHA, and actor
+   - **Preview URL**: The live environment URL from Preevy
+   - **Status**: Deployment status ("ready")
+
 ### Preevy Down Workflow (`preevy-down.yml`)
 
 This workflow cleans up preview environments when PRs are closed:
@@ -299,12 +334,81 @@ concurrency: preevy-${{ github.event.number }}
    - Removes GCP resources (VMs, networks, storage)
    - Cleans up Preevy state
 
+2. **Dashboard Cleanup**:
+   ```yaml
+   - name: Mark preview as down in dashboard
+     env:
+       PR_ID: ${{ github.event.pull_request.id }}
+     run: |
+       payload=$(
+         jq -n \
+           --arg id "preevy-$PR_ID" \
+           '{build_id:$id, status:"down"}'
+       )
+
+       curl -sS -X PATCH "https://preevy-preview-manager.vercel.app/api/previews" \
+         -H "Content-Type: application/json" \
+         -d "$payload"
+   ```
+   - Updates the dashboard to mark the preview environment as "down"
+   - Uses the same build ID format for consistency
+   - Ensures dashboard reflects current state of environments
+
 ### Workflow Benefits
 
 1. **Cost Optimization**: Automatic cleanup prevents resource waste
 2. **Isolation**: Each PR gets its own environment
 3. **Fast Feedback**: Developers see changes in live environment
 4. **Security**: Proper authentication and permission scoping
+5. **Centralized Monitoring**: Dashboard integration provides unified view of all preview environments
+6. **State Tracking**: Real-time status updates for deployment lifecycle
+
+## Vercel Dashboard Integration
+
+This demo includes integration with a centralized preview environment dashboard hosted on Vercel (`https://preevy-preview-manager.vercel.app`). This dashboard provides a unified view of all active preview environments across repositories.
+
+### Dashboard Features
+
+- **Real-time Status**: Track deployment status of all preview environments
+- **Metadata Collection**: Repository, PR number, commit SHA, branch, and actor information
+- **Environment URLs**: Direct links to preview environments
+- **Lifecycle Management**: Automatic status updates from "ready" to "down"
+
+### API Integration
+
+#### Preview Creation (POST `/api/previews`)
+When a preview environment is deployed, the workflow sends:
+
+```json
+{
+  "build_id": "preevy-{PR_ID}",
+  "repo": "owner/repo-name",
+  "pr_number": 123,
+  "commit_sha": "abc123...",
+  "branch": "feature-branch",
+  "actor": "username",
+  "frontend_url": "https://preview-url.preevy.dev",
+  "status": "ready"
+}
+```
+
+#### Preview Cleanup (PATCH `/api/previews`)
+When a PR is closed, the workflow updates:
+
+```json
+{
+  "build_id": "preevy-{PR_ID}",
+  "status": "down"
+}
+```
+
+### Benefits of Dashboard Integration
+
+1. **Centralized Monitoring**: Single view of all preview environments
+2. **Team Visibility**: Stakeholders can easily find and access preview environments
+3. **Resource Tracking**: Monitor environment lifecycle and usage patterns
+4. **Historical Data**: Track deployment frequency and patterns
+5. **Integration Ready**: API endpoints can be consumed by other tools
 
 ## Preevy Deployment Flow
 
@@ -329,14 +433,16 @@ concurrency: preevy-${{ github.event.number }}
    - Container is deployed to provisioned VM
    - Service is exposed via generated URL
 
-5. **Notification**
+5. **Notification & Dashboard Update**
    - Preview URL is posted to PR as comment
    - GitHub environment is updated with URL
    - Deployment status is reported
+   - **Dashboard Integration**: Preview metadata is sent to centralized dashboard for monitoring
 
 6. **Cleanup (PR Closure)**
    - `preevy-down.yml` workflow triggered
    - All GCP resources are destroyed
+   - **Dashboard Status Update**: Preview marked as "down" in dashboard
    - Costs stop accumulating immediately
 
 ### Preview Environment Features

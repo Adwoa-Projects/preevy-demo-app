@@ -1,0 +1,34 @@
+name: Deploy Preevy environment
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+concurrency: preevy-${{ github.event.number }}
+jobs:
+  deploy:
+    environment:
+      name: pr-${{ github.event.number }}
+      url: ${{ fromJson(steps.preevy_up.outputs.urls-map).frontend[3000] }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.PREEVY_SA_KEY }}'
+
+      - uses: livecycle/preevy-up-action@v2.4.0
+        id: preevy_up
+        with:
+          install: gh-release
+          profile-url: ${{ vars.PREEVY_PROFILE_URL }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

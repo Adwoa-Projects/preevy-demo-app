@@ -1,0 +1,29 @@
+name: Teardown Preevy environment
+on:
+  pull_request:
+    types:
+      - closed
+permissions:
+  id-token: write
+  contents: read
+concurrency: preevy-${{ github.event.number }}
+jobs:
+  teardown:
+    permissions: write-all
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          credentials_json: '${{ secrets.PREEVY_SA_KEY }}'
+
+      - uses: livecycle/preevy-down-action@v1.4.0
+        with:
+          profile-url: ${{ vars.PREEVY_PROFILE_URL }}
+          install: gh-release
+          args: '--force'

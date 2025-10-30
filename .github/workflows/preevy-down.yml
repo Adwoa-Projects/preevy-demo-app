@@ -27,3 +27,17 @@ jobs:
           profile-url: ${{ vars.PREEVY_PROFILE_URL }}
           install: gh-release
           args: '--force'
+
+      - name: Mark preview as down in dashboard
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          payload=$(
+            jq -n \
+              --arg id "preevy-$RUN_ID" \
+              '{build_id:$id, status:"down"}'
+          )
+
+          curl -sS -X POST "https://preevy-preview-manager.vercel.app/api/previews" \
+            -H "Content-Type: application/json" \
+            -d "$payload"

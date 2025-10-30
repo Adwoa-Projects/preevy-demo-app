@@ -32,3 +32,28 @@ jobs:
           profile-url: ${{ vars.PREEVY_PROFILE_URL }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Send build metadata to public API
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          FRONTEND_URL: ${{ fromJson(steps.preevy_up.outputs.urls-map).frontend[3000] }}
+        run: |
+          payload=$(
+            jq -n \
+              --arg id "preevy-$RUN_ID" \
+              --arg repo "$REPO" \
+              --arg pr "$PR_NUMBER" \
+              --arg sha "$SHA" \
+              --arg branch "${{ github.ref_name || github.ref }}" \
+              --arg actor "$ACTOR" \
+              --arg frontend "$FRONTEND_URL" \
+              '{build_id:$id, repo:$repo, pr_number:($pr|tonumber), commit_sha:$sha, branch:$branch, actor:$actor, frontend_url:$frontend, status:"ready"}'
+          )
+
+          curl -sS -X POST "https://preevy-preview-manager.vercel.app/api/previews" \
+            -H "Content-Type: application/json" \
+            -d "$payload"
